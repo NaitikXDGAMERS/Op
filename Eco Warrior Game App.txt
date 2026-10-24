@@ -1,0 +1,1023 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Trophy, 
+  Droplets, 
+  Sun, 
+  TreePine, 
+  Recycle, 
+  Search, 
+  Zap, 
+  Award, 
+  ShieldCheck, 
+  Volume2, 
+  VolumeX, 
+  CheckCircle2, 
+  RotateCcw,
+  LogOut,
+  ChevronRight,
+  TrendingUp,
+  Leaf,
+  Camera,
+  Play,
+  User,
+  Sparkles,
+  BookOpen,
+  ArrowLeft,
+  ArrowRight,
+  Upload,
+  RefreshCw,
+  Check,
+  AlertCircle
+} from 'lucide-react';
+
+// Web Audio API Sound Synthesizer for Retro Game SFX & BGM
+class SoundFX {
+  constructor() {
+    this.ctx = null;
+    this.bgmTimer = null;
+    this.isBgmPlaying = false;
+  }
+
+  init() {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+      }
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playChop() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.08);
+    } catch(e){}
+  }
+
+  playHit() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(20, this.ctx.currentTime + 0.25);
+      gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.25);
+    } catch(e){}
+  }
+
+  playReward() {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.15, now + idx * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.06 + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now + idx * 0.06);
+        osc.stop(now + idx * 0.06 + 0.15);
+      });
+    } catch(e){}
+  }
+
+  startBGM(enabled) {
+    if (!enabled) {
+      this.stopBGM();
+      return;
+    }
+    this.init();
+    if (!this.ctx || this.isBgmPlaying) return;
+    this.isBgmPlaying = true;
+
+    const notes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63];
+    let noteIdx = 0;
+
+    this.bgmTimer = setInterval(() => {
+      if (!this.isBgmPlaying || !this.ctx) return;
+      try {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = notes[noteIdx % notes.length];
+        gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+        noteIdx++;
+      } catch(e){}
+    }, 300);
+  }
+
+  stopBGM() {
+    this.isBgmPlaying = false;
+    if (this.bgmTimer) {
+      clearInterval(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+  }
+}
+
+const sfx = new SoundFX();
+
+// Characters Data for the Tree Game
+const CHARACTERS = [
+  { id: 'aditya', name: 'आदित्य (Eco Warrior)', avatar: '🧑‍🌾', axe: '🪓', color: 'from-amber-500 to-emerald-600', perk: 'Classic Ranger' },
+  { id: 'nitya', name: 'नित्या (Green Hero)', avatar: '👩‍🌾', axe: '⚔️', color: 'from-emerald-500 to-teal-600', perk: 'Fast Chopper' },
+  { id: 'ranger', name: 'फॉरेस्ट गार्ड (Forest Guard)', avatar: '🧔‍♂️', axe: '🪓', color: 'from-green-600 to-lime-600', perk: 'Extra Time' },
+  { id: 'ninja', name: 'ईको निंजा (Eco Ninja)', avatar: '🥷', axe: '🗡️', color: 'from-slate-700 to-emerald-900', perk: 'Combo Master' }
+];
+
+export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'game' | 'garden' | 'scan' | 'tasks' | 'leaderboard' | 'stories'
+
+  // User Auth State
+  const [user, setUser] = useState({
+    name: 'आदित्य मल्होत्रा',
+    email: 'aditya.ecowarrior@gmail.com',
+    photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
+  });
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+
+  // Settings
+  const [soundOn, setSoundOn] = useState(true);
+
+  // Overall User Progress
+  const [userPoints, setUserPoints] = useState(185);
+  const [selectedChar, setSelectedChar] = useState(CHARACTERS[0]);
+
+  // Top 20 Leaderboard State
+  const [leaderboard, setLeaderboard] = useState([
+    { rank: 1, name: 'मयांक यादव (Mayank)', score: 512, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80', badge: 'Legend' },
+    { rank: 2, name: 'नित्या शर्मा (Nitya)', score: 480, avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80', badge: 'Master' },
+    { rank: 3, name: 'JOKER ❤️‍🔥', score: 370, avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80', badge: 'Pro' },
+    { rank: 4, name: '👑 King PerKi 👑', score: 330, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80', badge: 'Pro' },
+    { rank: 5, name: 'अनिकेत वर्धन (Aniket)', score: 326, avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80', badge: 'Pro' },
+    { rank: 6, name: 'रुचिका मैम (Ruchika)', score: 312, avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&q=80', badge: 'Mentor' },
+    { rank: 7, name: 'राहुल सिंह (Rahul)', score: 300, avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=120&q=80', badge: 'Rookie' },
+    { rank: 8, name: 'प्रिया शर्मा (Priya)', score: 280, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80', badge: 'Rookie' },
+    { rank: 9, name: 'Eco_Warrior_99', score: 265, avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=120&q=80', badge: 'Rookie' },
+    { rank: 10, name: 'आर्यन गुप्ता (Aryan)', score: 250, avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=120&q=80', badge: 'Rookie' },
+    { rank: 11, name: 'दीपक वर्मा', score: 235, avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 12, name: 'सोनिया मेहता', score: 220, avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 13, name: 'अमित कुमार', score: 210, avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 14, name: 'Karan_Green', score: 195, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 15, name: 'पूजा चौधरी', score: 180, avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 16, name: 'Green_Guru_007', score: 165, avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 17, name: 'विकास कुमार', score: 150, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 18, name: 'नीहा पटेल', score: 140, avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 19, name: 'रोहन जोशी', score: 130, avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=120&q=80', badge: 'Starter' },
+    { rank: 20, name: 'श्वेता मिश्रा', score: 120, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80', badge: 'Starter' }
+  ]);
+
+  // Toast Notification State
+  const [toast, setToast] = useState(null);
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  // --- LUMBERJACK GAME STATE ---
+  const [gameState, setGameState] = useState('IDLE'); // 'IDLE' | 'PLAYING' | 'GAMEOVER'
+  const [gameScore, setGameScore] = useState(0);
+  const [playerSide, setPlayerSide] = useState('left'); // 'left' | 'right'
+  const [timeRemaining, setTimeRemaining] = useState(100); // 0 - 100%
+  const [branches, setBranches] = useState([]); // array of 'left' | 'right' | null
+  const gameLoopRef = useRef(null);
+
+  // Initialize branches
+  const generateBranches = () => {
+    const list = [];
+    for (let i = 0; i < 6; i++) {
+      if (i < 2) {
+        list.push(null); // Keep starting area safe
+      } else {
+        const rand = Math.random();
+        list.push(rand < 0.4 ? 'left' : rand < 0.8 ? 'right' : null);
+      }
+    }
+    return list;
+  };
+
+  const startGame = () => {
+    setGameState('PLAYING');
+    setGameScore(0);
+    setPlayerSide('left');
+    setTimeRemaining(100);
+    setBranches(generateBranches());
+    if (soundOn) sfx.startBGM(true);
+  };
+
+  const handleChop = (side) => {
+    if (gameState !== 'PLAYING') return;
+
+    setPlayerSide(side);
+    if (soundOn) sfx.playChop();
+
+    // Check collision with bottom branch
+    const currentBottomBranch = branches[0];
+    if (currentBottomBranch === side) {
+      // Hit by branch! Game Over!
+      triggerGameOver();
+      return;
+    }
+
+    // Chop successful
+    const newScore = gameScore + 1;
+    setGameScore(newScore);
+
+    // Replenish timer bar
+    setTimeRemaining(prev => Math.min(100, prev + 5));
+
+    // Shift branches down and add new branch at top
+    const rand = Math.random();
+    const newTopBranch = rand < 0.4 ? 'left' : rand < 0.8 ? 'right' : null;
+    const nextBranches = [...branches.slice(1), newTopBranch];
+    setBranches(nextBranches);
+
+    // Immediate check on newly shifted branch
+    if (nextBranches[0] === side) {
+      triggerGameOver();
+    }
+  };
+
+  const triggerGameOver = () => {
+    if (soundOn) {
+      sfx.playHit();
+      sfx.stopBGM();
+    }
+    setGameState('GAMEOVER');
+
+    // Update Points and Leaderboard
+    setUserPoints(p => p + gameScore);
+    updateTop20Leaderboard(user ? user.name : 'आप (You)', gameScore);
+  };
+
+  // Timer Tick during game
+  useEffect(() => {
+    if (gameState === 'PLAYING') {
+      gameLoopRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 0) {
+            triggerGameOver();
+            return 0;
+          }
+          return prev - 2.5; // Drain speed
+        });
+      }, 100);
+    } else {
+      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+    }
+    return () => {
+      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+    };
+  }, [gameState, gameScore, branches]);
+
+  // Helper to keep only TOP 20
+  const updateTop20Leaderboard = (playerName, newScore) => {
+    if (newScore <= 0) return;
+    setLeaderboard(prev => {
+      let updated = [...prev];
+      const existingIdx = updated.findIndex(u => u.name === playerName);
+      if (existingIdx !== -1) {
+        if (newScore > updated[existingIdx].score) {
+          updated[existingIdx].score = newScore;
+        }
+      } else {
+        updated.push({
+          rank: 0,
+          name: playerName,
+          score: newScore,
+          avatar: user?.photo || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+          badge: 'Player'
+        });
+      }
+      // Sort descending by score & limit strictly to TOP 20
+      updated.sort((a, b) => b.score - a.score);
+      return updated.slice(0, 20).map((item, idx) => ({ ...item, rank: idx + 1 }));
+    });
+  };
+
+  // Keyboard controls for Lumberjack game
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (activeTab === 'game' && gameState === 'PLAYING') {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+          handleChop('left');
+        } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+          handleChop('right');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, gameState, branches, gameScore]);
+
+  // --- AI PLANT SCANNER STATE (Daily 2x limit, +30 points) ---
+  const [dailyScanCount, setDailyScanCount] = useState(0); // Max 2
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setSelectedPhoto(reader.result);
+        setScanResult(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const processPhotoAnalysis = () => {
+    if (dailyScanCount >= 2) {
+      showToast('आज की 2 बार की सीमा पूरी हो चुकी है! कल फिर प्रयास करें।');
+      return;
+    }
+    if (!selectedPhoto) {
+      showToast('कृपया पहले पौधे/पानी देने की फोटो चुनें!');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setTimeout(() => {
+      setIsAnalyzing(false);
+      setDailyScanCount(prev => prev + 1);
+      setUserPoints(p => p + 30);
+      if (soundOn) sfx.playReward();
+      setScanResult({
+        success: true,
+        confidence: '98.4%',
+        message: 'AI द्वारा सत्यापन सफल! हरा पौधा और पानी की उपस्थिति पाई गई।'
+      });
+      showToast('🎉 बधाई! +30 फ्री पॉइंट्स आपके खाते में जोड़े गए!');
+    }, 2200);
+  };
+
+  // --- VIRTUAL GARDEN STATE ---
+  const [plants, setPlants] = useState([
+    { id: 1, name: 'नीम (Neem Tree)', stage: 2, water: 70, health: 100, icon: '🌳' },
+    { id: 2, name: 'तुलसी (Tulsi)', stage: 3, water: 90, health: 100, icon: '🪴' },
+    { id: 3, name: 'अमलतास (Amaltas)', stage: 1, water: 40, health: 80, icon: '🌱' }
+  ]);
+
+  const waterGardenPlant = (id) => {
+    setPlants(prev => prev.map(p => {
+      if (p.id === id) {
+        const newWater = Math.min(100, p.water + 30);
+        let newStage = p.stage;
+        if (newWater >= 90 && p.stage < 3) {
+          newStage += 1;
+          showToast(`🌱 बधाई! ${p.name} पौधे की वृद्धि हुई!`);
+          if (soundOn) sfx.playReward();
+        } else {
+          showToast(`💧 ${p.name} को पानी दिया गया!`);
+        }
+        return { ...p, water: newWater, stage: newStage };
+      }
+      return p;
+    }));
+  };
+
+  // --- ECO TASKS STATE ---
+  const [tasks, setTasks] = useState([
+    { id: 't1', title: 'पर्यावरण जासूस (Eco Spy)', desc: 'अपने घर/आस-पास बहते हुए नल या जलते कचरे की सूचना दर्ज करें।', points: 40, completed: false, category: 'जांच' },
+    { id: 't2', title: 'सौर ऊर्जा उपयोग (Solar Power)', desc: 'दिन के समय घर की कृत्रिम रोशनी बंद रखकर प्राकृतिक प्रकाश का प्रयोग करें।', points: 30, completed: false, category: 'ऊर्जा' },
+    { id: 't3', title: 'वर्षा जल संचयन (Rain Harvesting)', desc: 'छत के पानी को संरक्षित कर पौधों में पुनः प्रयोग करें।', points: 50, completed: false, category: 'जल संरक्षण' },
+    { id: 't4', title: 'प्लास्टिक रिसाइकिल (Recycle)', desc: 'प्लास्टिक की पुरानी बोतलों को गमले या सजावट के रूप में री-यूज़ करें।', points: 35, completed: false, category: 'पुनर्चक्रण' }
+  ]);
+
+  const completeTask = (id) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === id && !t.completed) {
+        setUserPoints(p => p + t.points);
+        if (soundOn) sfx.playReward();
+        showToast(`✅ कार्य पूरा! +${t.points} अंक मिले!`);
+        return { ...t, completed: true };
+      }
+      return t;
+    }));
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-emerald-500 selection:text-slate-950">
+      
+      {/* Toast Popup */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-50 bg-emerald-500 text-slate-950 px-5 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-3 border border-emerald-300 animate-bounce">
+          <Sparkles className="w-5 h-5 text-amber-900" />
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-emerald-800/40 px-4 lg:px-8 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-950">
+            <Leaf className="w-6 h-6 text-slate-950 stroke-[2.5]" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
+              पर्यावरण रक्षक (Eco-Warrior)
+            </h1>
+            <p className="text-[11px] text-emerald-400/80 font-medium">ज्ञानदीप स्कूल डिजिटल क्रांति</p>
+          </div>
+        </div>
+
+        {/* User Badge & Audio Toggle */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              const next = !soundOn;
+              setSoundOn(next);
+              if (!next) sfx.stopBGM();
+            }}
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+            title="Sound Toggle"
+          >
+            {soundOn ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-rose-400" />}
+          </button>
+
+          <div className="flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/60 px-3.5 py-1.5 rounded-full">
+            <Trophy className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="text-sm font-extrabold text-amber-300">{userPoints} PTS</span>
+          </div>
+
+          {user ? (
+            <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 p-1.5 pr-3 rounded-full">
+              <img src={user.photo} alt={user.name} className="w-7 h-7 rounded-full object-cover border border-emerald-400" />
+              <span className="text-xs font-semibold max-w-[90px] truncate hidden sm:inline">{user.name}</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowGoogleModal(true)}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md"
+            >
+              Sign In
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Main Responsive Body */}
+      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-4 sm:p-6 gap-6">
+        
+        {/* Navigation Sidebar */}
+        <nav className="flex md:flex-col justify-around md:justify-start gap-2 bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800 backdrop-blur-md md:w-64 shrink-0">
+          <button
+            onClick={() => { setActiveTab('dashboard'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'dashboard' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5" />
+            <span className="hidden md:inline">डैशबोर्ड (Dashboard)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('game')}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'game' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <Play className="w-5 h-5 text-amber-400 fill-current" />
+            <span className="hidden md:inline">गेम खेलें (Chop Game)</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('scan'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'scan' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <Camera className="w-5 h-5 text-cyan-400" />
+            <span className="hidden md:inline">AI पौधा स्कैनर (+30 PTS)</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('garden'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'garden' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <TreePine className="w-5 h-5" />
+            <span className="hidden md:inline">वर्चुअल बगीचा (Garden)</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('tasks'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'tasks' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <CheckCircle2 className="w-5 h-5" />
+            <span className="hidden md:inline">पर्यावरण कार्य (Tasks)</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('leaderboard'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'leaderboard' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <Trophy className="w-5 h-5 text-amber-400" />
+            <span className="hidden md:inline">टॉप 20 लीडरबोर्ड</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('stories'); sfx.stopBGM(); }}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              activeTab === 'stories' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span className="hidden md:inline">ग्रीन स्टोरीज़ (Stories)</span>
+          </button>
+        </nav>
+
+        {/* Dynamic Display Area */}
+        <main className="flex-1 bg-slate-900/60 rounded-3xl border border-slate-800 p-4 sm:p-6 backdrop-blur-md min-h-[550px]">
+          
+          {/* TAB 1: DASHBOARD */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900/90 via-teal-900/70 to-slate-900 p-6 sm:p-8 border border-emerald-500/30 shadow-2xl">
+                <div className="relative z-10 max-w-xl">
+                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full border border-emerald-400/30">
+                    पाठ 8: एक नई पर्यावरण क्रांति
+                  </span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white mt-3 mb-2">
+                    स्वागत है, {user ? user.name : 'पर्यावरण रक्षक'}! 🌱
+                  </h2>
+                  <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-6">
+                    पेड़ काटकर स्कोर बनाएं, रोज असली पौधे की फोटो खींचकर 30 फ्री पॉइंट्स कमाएं और ज्ञानदीप स्कूल के टॉप 20 लीडरबोर्ड पर अपनी जगह बनाएं!
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => setActiveTab('game')}
+                      className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-5 py-3 rounded-xl text-sm transition-all shadow-xl flex items-center gap-2"
+                    >
+                      <Play className="w-4 h-4 fill-current" /> गेम खेलें (Tree Chop)
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('scan')}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-xl text-sm transition-all flex items-center gap-2 border border-emerald-400/40"
+                    >
+                      <Camera className="w-4 h-4" /> पौधा फोटो अपलोड (+30 PTS)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Character Selector Card */}
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800">
+                <h3 className="text-base font-bold text-slate-200 mb-3 flex items-center gap-2">
+                  <User className="w-5 h-5 text-emerald-400" /> अपना गेम कैरेक्टर चुनें (Select Character)
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {CHARACTERS.map((char) => {
+                    const isSelected = selectedChar.id === char.id;
+                    return (
+                      <button
+                        key={char.id}
+                        onClick={() => {
+                          setSelectedChar(char);
+                          showToast(`कैरेक्टर चुना गया: ${char.name}`);
+                        }}
+                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center ${
+                          isSelected 
+                            ? 'bg-gradient-to-b from-emerald-950 to-slate-900 border-emerald-400 shadow-lg shadow-emerald-950 scale-105' 
+                            : 'bg-slate-950 border-slate-800 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="text-4xl mb-2">{char.avatar}</div>
+                        <p className="text-xs font-bold text-slate-200">{char.name}</p>
+                        <p className="text-[10px] text-emerald-400 mt-1">{char.perk}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quick Leaderboard Snapshot */}
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base font-bold text-slate-200 flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-400" /> टॉप 3 चैंपियंस
+                  </h3>
+                  <button onClick={() => setActiveTab('leaderboard')} className="text-xs text-emerald-400 hover:underline">
+                    पूरा 20 लीडरबोर्ड देखें →
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {leaderboard.slice(0, 3).map((player) => (
+                    <div key={player.rank} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                        player.rank === 1 ? 'bg-amber-400 text-slate-950' :
+                        player.rank === 2 ? 'bg-slate-300 text-slate-950' : 'bg-amber-700 text-white'
+                      }`}>
+                        #{player.rank}
+                      </div>
+                      <img src={player.avatar} alt={player.name} className="w-8 h-8 rounded-full object-cover" />
+                      <div className="truncate">
+                        <p className="text-xs font-bold text-slate-200 truncate">{player.name}</p>
+                        <p className="text-xs font-extrabold text-amber-300">{player.score} PTS</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: LUMBERJACK-STYLE TREE ACTION GAME */}
+          {activeTab === 'game' && (
+            <div className="max-w-md mx-auto space-y-4 animate-fadeIn">
+              {/* Game Screen Container */}
+              <div className="relative bg-gradient-to-b from-sky-300 via-teal-200 to-emerald-300 rounded-3xl border-4 border-slate-800 overflow-hidden h-[480px] shadow-2xl flex flex-col justify-between p-4">
+                
+                {/* Timer Bar */}
+                <div className="w-full bg-slate-900/40 h-3 rounded-full overflow-hidden p-0.5 border border-white/50">
+                  <div 
+                    className="bg-gradient-to-r from-amber-400 to-rose-500 h-full rounded-full transition-all duration-100" 
+                    style={{ width: `${timeRemaining}%` }}
+                  ></div>
+                </div>
+
+                {/* Top Game Score Display */}
+                <div className="text-center z-10">
+                  <span className="text-4xl font-black text-slate-900 drop-shadow-md">
+                    {gameScore}
+                  </span>
+                  <p className="text-[10px] font-bold text-emerald-950 uppercase tracking-widest">
+                    Chop Score
+                  </p>
+                </div>
+
+                {/* Central Tree Trunk & Branches Visual */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  {/* Tree Trunk */}
+                  <div className="w-20 bg-amber-800 border-x-4 border-amber-950 h-full relative flex flex-col justify-end pb-8">
+                    {/* Render Branches on Trunk */}
+                    {branches.map((branch, idx) => {
+                      if (!branch) return <div key={idx} className="h-16"></div>;
+                      return (
+                        <div key={idx} className={`h-16 relative flex items-center ${branch === 'left' ? 'justify-start' : 'justify-end'}`}>
+                          <div className={`w-16 h-6 bg-amber-900 border-2 border-amber-950 rounded-lg flex items-center justify-center ${
+                            branch === 'left' ? '-translate-x-12' : 'translate-x-12'
+                          }`}>
+                            <span className="text-xs">🍃🍃</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Character Position Left or Right */}
+                  <div className={`absolute bottom-8 transition-all duration-75 text-5xl ${
+                    playerSide === 'left' ? 'left-12' : 'right-12'
+                  }`}>
+                    {selectedChar.avatar}
+                  </div>
+                </div>
+
+                {/* GAME OVER OVERLAY */}
+                {gameState === 'GAMEOVER' && (
+                  <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+                    <h3 className="text-2xl font-black text-rose-400 mb-1">गेम ओवर! (Game Over)</h3>
+                    <p className="text-xs text-slate-300 mb-3">आपकी टहनी (Branch) से टक्कर हो गई!</p>
+                    
+                    <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-2xl mb-4">
+                      <p className="text-xs text-slate-400">आपका कुल स्कोर</p>
+                      <p className="text-3xl font-black text-amber-300">{gameScore}</p>
+                    </div>
+
+                    <button
+                      onClick={startGame}
+                      className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-6 py-3 rounded-2xl text-sm transition-all shadow-xl flex items-center gap-2 mb-2"
+                    >
+                      <RotateCcw className="w-4 h-4" /> फिर से खेलें (Restart)
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('leaderboard')}
+                      className="text-xs text-emerald-400 underline font-semibold"
+                    >
+                      टॉप 20 लीडरबोर्ड देखें →
+                    </button>
+                  </div>
+                )}
+
+                {/* IDLE OVERLAY */}
+                {gameState === 'IDLE' && (
+                  <div className="absolute inset-0 z-30 bg-slate-950/75 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                    <div className="text-5xl mb-2">{selectedChar.avatar}</div>
+                    <h3 className="text-xl font-black text-white mb-1">{selectedChar.name}</h3>
+                    <p className="text-xs text-slate-300 mb-4">
+                      टहनियों (Branches) से बचें! Left या Right दबाकर तेजी से Chop करें।
+                    </p>
+                    <button
+                      onClick={startGame}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl text-base transition-all shadow-xl flex items-center gap-2 animate-bounce"
+                    >
+                      <Play className="w-5 h-5 fill-current" /> गेम शुरू करें
+                    </button>
+                  </div>
+                )}
+
+                {/* Touch Controls (Left / Right Buttons) */}
+                <div className="relative z-20 grid grid-cols-2 gap-4 mt-auto">
+                  <button
+                    onClick={() => handleChop('left')}
+                    className="bg-amber-700/90 active:bg-amber-600 text-white font-black py-4 rounded-2xl border-2 border-amber-900 shadow-xl flex items-center justify-center gap-2 text-base active:scale-95 transition-all"
+                  >
+                    <ArrowLeft className="w-6 h-6" /> LEFT
+                  </button>
+                  <button
+                    onClick={() => handleChop('right')}
+                    className="bg-amber-700/90 active:bg-amber-600 text-white font-black py-4 rounded-2xl border-2 border-amber-900 shadow-xl flex items-center justify-center gap-2 text-base active:scale-95 transition-all"
+                  >
+                    RIGHT <ArrowRight className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: AI PLANT & WATER PHOTO SCANNER (Daily 2x limit, +30 Points) */}
+          {activeTab === 'scan' && (
+            <div className="max-w-xl mx-auto space-y-6 animate-fadeIn">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <Camera className="w-6 h-6 text-cyan-400" /> AI पौधा एवं जल स्कैनर (+30 Free Points)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  असली पौधे लगाने या पानी देने की फोटो खींचकर अपलोड करें। ऐप AI द्वारा सत्यापन करके +30 पॉइंट्स देगा (दिन में अधिकतम 2 बार)।
+                </p>
+              </div>
+
+              {/* Limit Status Bar */}
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-400 font-medium">आज का उपयोग limit</p>
+                  <p className="text-sm font-bold text-emerald-400">{dailyScanCount} / 2 बार पूरा हुआ</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  dailyScanCount < 2 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {dailyScanCount < 2 ? 'उपलब्ध (Available)' : 'आज की सीमा समाप्त'}
+                </span>
+              </div>
+
+              {/* Photo Upload Box */}
+              <div className="bg-slate-950/80 p-6 rounded-3xl border-2 border-dashed border-slate-700 text-center space-y-4">
+                {selectedPhoto ? (
+                  <div className="relative max-w-xs mx-auto">
+                    <img src={selectedPhoto} alt="Uploaded plant" className="w-full h-48 object-cover rounded-2xl border border-emerald-500/50" />
+                    <button
+                      onClick={() => { setSelectedPhoto(null); setScanResult(null); }}
+                      className="absolute top-2 right-2 bg-rose-600 text-white p-1.5 rounded-full text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block py-8">
+                    <Upload className="w-10 h-10 text-emerald-400 mx-auto mb-2 animate-pulse" />
+                    <span className="text-sm font-bold text-slate-200 block">फोटो चुनें या कैमरा से खींचे</span>
+                    <span className="text-xs text-slate-400 block mt-1">पौधा / पानी डालने की फोटो (JPG, PNG)</span>
+                    <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
+                )}
+
+                {selectedPhoto && !scanResult && (
+                  <button
+                    onClick={processPhotoAnalysis}
+                    disabled={isAnalyzing || dailyScanCount >= 2}
+                    className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 font-bold px-6 py-3 rounded-2xl text-sm transition-all shadow-xl flex items-center justify-center gap-2 w-full"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" /> AI विश्लेषण जारी है...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" /> फोटो सत्यापित करें और +30 अंक प्राप्त करें
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Scan Result Box */}
+                {scanResult && (
+                  <div className="bg-emerald-950/60 p-4 rounded-2xl border border-emerald-500/50 text-left space-y-2 animate-scaleUp">
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                      <CheckCircle2 className="w-5 h-5" /> {scanResult.message}
+                    </div>
+                    <p className="text-xs text-slate-300">सत्यापन शुद्धता Score: <span className="text-emerald-300 font-bold">{scanResult.confidence}</span></p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: INTERACTIVE VIRTUAL GARDEN */}
+          {activeTab === 'garden' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <TreePine className="w-6 h-6 text-emerald-400" /> वर्चुअल बगीचा (Virtual Eco-Garden)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  पौधों को समय पर पानी देकर उन्हें बड़ा वृक्ष बनाएं।
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {plants.map((plant) => (
+                  <div key={plant.id} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-center space-y-3">
+                    <div className="text-5xl my-2">{plant.stage === 1 ? '🌱' : plant.stage === 2 ? '🪴' : plant.icon}</div>
+                    <h3 className="font-bold text-slate-200 text-sm">{plant.name}</h3>
+                    <p className="text-xs text-slate-400">वृद्धि चरण: Level {plant.stage}/3</p>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-cyan-400 h-full rounded-full" style={{ width: `${plant.water}%` }}></div>
+                    </div>
+                    <button
+                      onClick={() => waterGardenPlant(plant.id)}
+                      className="bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 border border-cyan-700/50 py-2 px-4 rounded-xl text-xs font-bold w-full transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Droplets className="w-3.5 h-3.5" /> पानी दें
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: ECO TASKS */}
+          {activeTab === 'tasks' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400" /> दैनिक पर्यावरण मिशन
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  किताब के अध्याय 'एक नई पर्यावरण क्रांति' से प्रेरित कार्य।
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {tasks.map((task) => (
+                  <div key={task.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-sm text-slate-200">{task.title}</h3>
+                        <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">{task.category}</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">{task.desc}</p>
+                    </div>
+
+                    <div className="shrink-0">
+                      {task.completed ? (
+                        <span className="text-xs text-emerald-400 font-bold bg-emerald-950/80 px-3 py-1.5 rounded-xl border border-emerald-800">
+                          संपन्न ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => completeTask(task.id)}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition-all"
+                        >
+                          + {task.points} PTS
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: TOP 20 LEADERBOARD */}
+          {activeTab === 'leaderboard' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <Trophy className="w-6 h-6 text-amber-400" /> शीर्ष 20 लीडरबोर्ड (Top 20 Leaderboard)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  केवल उच्चतम स्कोर वाले शीर्ष 20 खिलाड़ियों की सूची।
+                </p>
+              </div>
+
+              <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
+                <div className="divide-y divide-slate-800">
+                  {leaderboard.map((item) => (
+                    <div key={item.rank} className="p-3.5 flex items-center justify-between gap-4 hover:bg-slate-900/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                          item.rank === 1 ? 'bg-amber-400 text-slate-950' :
+                          item.rank === 2 ? 'bg-slate-300 text-slate-950' :
+                          item.rank === 3 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          #{item.rank}
+                        </div>
+                        <img src={item.avatar} alt={item.name} className="w-9 h-9 rounded-full object-cover" />
+                        <div>
+                          <p className="text-sm font-bold text-slate-200">{item.name}</p>
+                          <p className="text-[10px] text-emerald-400">{item.badge}</p>
+                        </div>
+                      </div>
+                      <p className="text-base font-black text-amber-300">{item.score} PTS</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: GREEN STORIES */}
+          {activeTab === 'stories' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <BookOpen className="w-6 h-6 text-teal-400" /> ग्रीन स्टोरी टाइम (Green Story Time)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  अध्याय 8 की प्रेरणादायक पर्यावरण कहानियां।
+                </p>
+              </div>
+
+              <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-3">
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold">ज्ञानदीप स्कूल दिल्ली</span>
+                <h3 className="text-lg font-bold text-slate-100">आदित्य और नित्या का 'ईको-वारियर' ऐप आंदोलन</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  11वीं के छात्र आदित्य ने ग्लोबल वार्मिंग पर बनी वीडियो देखकर पर्यावरण संरक्षण की प्रतिज्ञा ली। अपनी सहपाठी नित्या के साथ मिलकर उन्होंने कोडिंग करके इस ऐप को बनाया ताकि छात्र वृक्षारोपण और जल संरक्षण के टास्क करके पॉइंट्स पा सकें।
+                </p>
+              </div>
+            </div>
+          )}
+
+        </main>
+      </div>
+
+      {/* Google Sign-In Simulation Modal */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+            <h3 className="font-bold text-slate-100 text-base">Google Sign-In</h3>
+            <button
+              onClick={() => {
+                setUser({
+                  name: 'आदित्य मल्होत्रा',
+                  email: 'aditya.ecowarrior@gmail.com',
+                  photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
+                });
+                setShowGoogleModal(false);
+                showToast('गूगल साइन-इन सफल!');
+              }}
+              className="w-full flex items-center gap-3 p-3 bg-slate-800 hover:bg-slate-700 rounded-2xl border border-slate-700 text-left transition-all"
+            >
+              <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Aditya" className="w-10 h-10 rounded-full" />
+              <div>
+                <p className="text-sm font-bold text-slate-200">आदित्य मल्होत्रा</p>
+                <p className="text-xs text-slate-400">aditya.ecowarrior@gmail.com</p>
+              </div>
+            </button>
+            <button onClick={() => setShowGoogleModal(false)} className="text-xs text-slate-400 underline w-full text-center">
+              रद्द करें
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
